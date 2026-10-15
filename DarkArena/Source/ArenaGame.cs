@@ -47,6 +47,7 @@ public sealed class ArenaGame : Game
         {
             PreferredBackBufferWidth = 1280,
             PreferredBackBufferHeight = 720,
+            PreferredDepthStencilFormat = DepthFormat.Depth24Stencil8,
             PreferMultiSampling = screenshotPath == null, // в Xvfb MSAA недоступен
             SynchronizeWithVerticalRetrace = true,
         };
@@ -78,13 +79,14 @@ public sealed class ArenaGame : Game
         while (_crystals.Count < TotalCrystals)
         {
             var p = new Vector3(rng.Next(-18, 19), 0, rng.Next(-18, 19));
-            // Ставим на верх препятствия, если попали в него
-            var probe = new BoundingBox(p + new Vector3(-.5f, 0, -.5f), p + new Vector3(.5f, 0.1f, .5f));
-            float top = 0; bool onHazard = false;
-            foreach (var s in _level.Solids) if (s.Max.Y > 0.01f && s.Intersects(probe)) top = Math.Max(top, s.Max.Y);
-            foreach (var h in _level.Hazards) if (h.Intersects(probe)) onHazard = true;
-            if (onHazard || top > 3f) continue;
-            _crystals.Add(new Collectible(new Vector3(p.X, top + 1f, p.Z), (float)rng.NextDouble() * 6f));
+            // 1 м над полом; пересэмплируем, если рядом препятствие или опасная зона
+            var c = new Vector3(p.X, 1f, p.Z);
+            var probe = new BoundingBox(c - new Vector3(0.8f, 1f, 0.8f), c + new Vector3(0.8f, 1.5f, 0.8f));
+            bool blocked = false;
+            foreach (var s in _level.Solids) if (s.Max.Y > 0.01f && s.Intersects(probe)) blocked = true;
+            foreach (var h in _level.Hazards) if (h.Intersects(probe)) blocked = true;
+            if (blocked) continue;
+            _crystals.Add(new Collectible(c, (float)rng.NextDouble() * 6f));
         }
         _collected = 0; _timeLeft = RoundTime; _health = 1f;
     }
@@ -204,21 +206,26 @@ public sealed class ArenaGame : Game
         var vp = GraphicsDevice.Viewport.Bounds;
         GraphicsDevice.Clear(Palette.SkyTop);
 
-        // Фон-градиент
-        _ui.Batch.Begin();
-        _ui.SkyGradient(vp, Palette.SkyTop, Palette.SkyBottom);
-        _ui.Batch.End();
+        // Небо: полноэкранный градиент
+        _prim.DrawSky(Palette.SkyTop, Palette.SkyBottom);
 
-        // 3D-сцена
+        // 3D: сначала непрозрачное (запись глубины включена)
         GraphicsDevice.DepthStencilState = DepthStencilState.Default;
         GraphicsDevice.BlendState = BlendState.Opaque;
-        GraphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
+        GraphicsDevice.RasterizerState = RasterizerState.CullClockwise; // меши заданы против часовой стрелки (CCW = лицевая грань)
         GraphicsDevice.SamplerStates[0] = SamplerState.LinearClamp;
         _prim.SetCamera(_camera.View, _camera.Projection);
         _level.Draw(_prim);
         foreach (var c in _crystals) c.Draw(_prim);
         _player.Draw(_prim);
         _particles.Draw(_prim);
+
+        // Затем полупрозрачное: сетка (без записи глубины)
+        GraphicsDevice.BlendState = BlendState.AlphaBlend;
+        GraphicsDevice.DepthStencilState = DepthStencilState.DepthRead;
+        _level.DrawGrid(_prim);
+        GraphicsDevice.BlendState = BlendState.Opaque;
+        GraphicsDevice.DepthStencilState = DepthStencilState.Default;
 
         // 2D-интерфейс
         _ui.Batch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp);

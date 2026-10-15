@@ -20,14 +20,14 @@ public sealed class Primitives
         Effect = new BasicEffect(gd) { LightingEnabled = true, PreferPerPixelLighting = true };
         Effect.DirectionalLight0.Enabled = true;
         Effect.DirectionalLight0.Direction = Vector3.Normalize(new Vector3(-0.4f, -1f, -0.6f));
-        Effect.DirectionalLight0.DiffuseColor = new Vector3(1.1f, 1.1f, 1.15f);
+        Effect.DirectionalLight0.DiffuseColor = new Vector3(0.75f, 0.75f, 0.8f);
         Effect.DirectionalLight0.SpecularColor = new Vector3(0.15f);
         Effect.DirectionalLight1.Enabled = false;
         Effect.DirectionalLight2.Enabled = false;
-        Effect.AmbientLightColor = new Vector3(0.5f, 0.55f, 0.75f); // голубоватый ambient
+        Effect.AmbientLightColor = new Vector3(0.3f, 0.34f, 0.48f); // голубоватый ambient
         Effect.FogEnabled = true;
         Effect.FogColor = Palette.Fog.ToVector3();
-        Effect.FogStart = 30f; Effect.FogEnd = 90f;
+        Effect.FogStart = 25f; Effect.FogEnd = 60f;
         _cube = Build(gd, CubeVerts());
         _crystal = Build(gd, IcosaVerts());
         _cylinder = Build(gd, CylinderVerts(8));
@@ -103,6 +103,23 @@ public sealed class Primitives
 
     public void DrawCylinder(Matrix world, Color color) => Draw(_cylinder, world, color, 0f, true);
 
+    private VertexPositionColor[] _sky;
+    private BasicEffect _skyEffect;
+
+    /// <summary>Полноэкранный квад с вертикальным градиентом (верх → горизонт).</summary>
+    public void DrawSky(Color top, Color horizon)
+    {
+        _skyEffect ??= new BasicEffect(_gd) { VertexColorEnabled = true, World = Matrix.Identity, View = Matrix.Identity, Projection = Matrix.Identity };
+        _sky ??= new VertexPositionColor[4];
+        _sky[0] = new(new Vector3(-1, 1, 0), top); _sky[1] = new(new Vector3(1, 1, 0), top);
+        _sky[2] = new(new Vector3(-1, -1, 0), horizon); _sky[3] = new(new Vector3(1, -1, 0), horizon);
+        _gd.DepthStencilState = DepthStencilState.None;
+        _gd.BlendState = BlendState.Opaque;
+        _gd.RasterizerState = RasterizerState.CullNone;
+        _skyEffect.CurrentTechnique.Passes[0].Apply();
+        _gd.DrawUserPrimitives(PrimitiveType.TriangleStrip, _sky, 0, 2);
+    }
+
     public void SetCamera(Matrix view, Matrix proj)
     {
         Effect.View = view; Effect.Projection = proj;
@@ -114,12 +131,13 @@ public sealed class Primitives
         Effect.DirectionalLight0.Direction = Vector3.Normalize(fwd + new Vector3(0.35f, -1.1f, 0) );
     }
 
-    public void DrawCube(Matrix world, Color color, float emissive = 0f, bool lit = true) => Draw(_cube, world, color, emissive, lit);
+    public void DrawCube(Matrix world, Color color, float emissive = 0f, bool lit = true, float alpha = 1f) => Draw(_cube, world, color, emissive, lit, alpha);
     public void DrawCrystal(Matrix world, Color color, float emissive = 0f) => Draw(_crystal, world, color, emissive, true);
 
-    private void Draw(VertexBuffer vb, Matrix world, Color color, float emissive, bool lit)
+    private void Draw(VertexBuffer vb, Matrix world, Color color, float emissive, bool lit, float alpha = 1f)
     {
         Effect.LightingEnabled = lit;
+        Effect.Alpha = alpha;
         Effect.World = world;
         Effect.DiffuseColor = color.ToVector3();
         Effect.EmissiveColor = color.ToVector3() * emissive;

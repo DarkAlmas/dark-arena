@@ -61,14 +61,22 @@ public sealed class Level
             prim.DrawCube(Matrix.CreateScale(t, size.Y, t) * Matrix.CreateTranslation(x, c.Y, z), Palette.ObstacleEdge, 0.6f);
     }
 
+    /// <summary>Сетка на полу: полупрозрачная, рисуется после непрозрачной геометрии.</summary>
+    public void DrawGrid(Primitives prim)
+    {
+        int i = 0;
+        for (float x = -HalfSize; x <= HalfSize; x += 2f, i++)
+        {
+            bool major = i % 10 == 0;
+            var c = major ? Color.Lerp(Palette.Grid, Color.White, 0.15f) : Palette.Grid;
+            float a = major ? 0.5f : 0.35f, w = major ? 0.07f : 0.05f;
+            prim.DrawCube(Matrix.CreateScale(w, 0.01f, HalfSize * 2) * Matrix.CreateTranslation(x, 0.006f, 0), c, 0f, false, a);
+            prim.DrawCube(Matrix.CreateScale(HalfSize * 2, 0.01f, w) * Matrix.CreateTranslation(0, 0.006f, x), c, 0f, false, a);
+        }
+    }
+
     public void Draw(Primitives prim)
     {
-        // Линии сетки на полу
-        for (float x = -HalfSize; x <= HalfSize; x += 2f)
-        {
-            prim.DrawCube(Matrix.CreateScale(0.05f, 0.01f, HalfSize * 2) * Matrix.CreateTranslation(x, 0.005f, 0), Palette.Grid, 1f, false);
-            prim.DrawCube(Matrix.CreateScale(HalfSize * 2, 0.01f, 0.05f) * Matrix.CreateTranslation(0, 0.005f, x), Palette.Grid, 1f, false);
-        }
         foreach (var h in Hazards)
         {
             var hs = h.Max - h.Min;
