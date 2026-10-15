@@ -207,7 +207,7 @@ public sealed class ArenaGame : Game
         GraphicsDevice.Clear(Palette.SkyTop);
 
         // Небо: полноэкранный градиент
-        _prim.DrawSky(Palette.SkyTop, Palette.SkyBottom);
+        _prim.DrawSky(Palette.SkyTop, Palette.SkyBottom, _camera.View, _camera.Projection);
 
         // 3D: сначала непрозрачное (запись глубины включена)
         GraphicsDevice.DepthStencilState = DepthStencilState.Default;

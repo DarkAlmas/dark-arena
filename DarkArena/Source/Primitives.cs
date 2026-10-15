@@ -27,7 +27,7 @@ public sealed class Primitives
         Effect.AmbientLightColor = new Vector3(0.3f, 0.34f, 0.48f); // голубоватый ambient
         Effect.FogEnabled = true;
         Effect.FogColor = Palette.Fog.ToVector3();
-        Effect.FogStart = 25f; Effect.FogEnd = 60f;
+        Effect.FogStart = 12f; Effect.FogEnd = 45f; // линейный туман, полностью непрозрачен к 45 м
         _cube = Build(gd, CubeVerts());
         _crystal = Build(gd, IcosaVerts());
         _cylinder = Build(gd, CylinderVerts(8));
@@ -103,21 +103,28 @@ public sealed class Primitives
 
     public void DrawCylinder(Matrix world, Color color) => Draw(_cylinder, world, color, 0f, true);
 
-    private VertexPositionColor[] _sky;
+    private readonly VertexPositionColor[] _sky = new VertexPositionColor[6];
     private BasicEffect _skyEffect;
 
-    /// <summary>Полноэкранный квад с вертикальным градиентом (верх → горизонт).</summary>
-    public void DrawSky(Color top, Color horizon)
+    /// <summary>Полноэкранное небо: градиент от top (верх экрана) к horizon на линии горизонта, ниже — сплошной horizon.</summary>
+    public void DrawSky(Color top, Color horizon, Matrix view, Matrix proj)
     {
         _skyEffect ??= new BasicEffect(_gd) { VertexColorEnabled = true, World = Matrix.Identity, View = Matrix.Identity, Projection = Matrix.Identity };
-        _sky ??= new VertexPositionColor[4];
-        _sky[0] = new(new Vector3(-1, 1, 0), top); _sky[1] = new(new Vector3(1, 1, 0), top);
-        _sky[2] = new(new Vector3(-1, -1, 0), horizon); _sky[3] = new(new Vector3(1, -1, 0), horizon);
+        // Горизонт: проекция далёкой точки по горизонтальному направлению взгляда
+        var inv = Matrix.Invert(view);
+        var fwd = inv.Forward; fwd.Y = 0;
+        if (fwd.LengthSquared() < 1e-6f) fwd = Vector3.Forward;
+        fwd.Normalize();
+        var clip = Vector4.Transform(new Vector4(inv.Translation + fwd * 1000f, 1f), view * proj);
+        float h = clip.W > 1e-4f ? MathHelper.Clamp(clip.Y / clip.W, -1f, 0.999f) : -1f;
+        _sky[0] = new(new Vector3(-1, 1, 0), top);     _sky[1] = new(new Vector3(1, 1, 0), top);
+        _sky[2] = new(new Vector3(-1, h, 0), horizon); _sky[3] = new(new Vector3(1, h, 0), horizon);
+        _sky[4] = new(new Vector3(-1, -1, 0), horizon); _sky[5] = new(new Vector3(1, -1, 0), horizon);
         _gd.DepthStencilState = DepthStencilState.None;
         _gd.BlendState = BlendState.Opaque;
         _gd.RasterizerState = RasterizerState.CullNone;
         _skyEffect.CurrentTechnique.Passes[0].Apply();
-        _gd.DrawUserPrimitives(PrimitiveType.TriangleStrip, _sky, 0, 2);
+        _gd.DrawUserPrimitives(PrimitiveType.TriangleStrip, _sky, 0, 4);
     }
 
     public void SetCamera(Matrix view, Matrix proj)
