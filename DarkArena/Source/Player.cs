@@ -56,7 +56,20 @@ public sealed class Player
             Velocity.Y = 0;
         }
 
-        if (Position.Y < -20) Position = new Vector3(0, 2, 0); // страховка
+        // Страховка: игрок никогда не покидает арену
+        float lim = Level.HalfSize - HalfExtents.X - 0.001f;
+        Position.X = MathHelper.Clamp(Position.X, -lim, lim);
+        Position.Z = MathHelper.Clamp(Position.Z, -lim, lim);
+        if (Position.Y < -20) Position = new Vector3(0, 2, 0);
+    }
+
+    /// <summary>Строгое пересечение: касание гранью (стоим на полу) столкновением не считается.</summary>
+    private static bool Overlaps(BoundingBox a, BoundingBox b)
+    {
+        const float e = 1e-4f;
+        return a.Min.X < b.Max.X - e && a.Max.X > b.Min.X + e
+            && a.Min.Y < b.Max.Y - e && a.Max.Y > b.Min.Y + e
+            && a.Min.Z < b.Max.Z - e && a.Max.Z > b.Min.Z + e;
     }
 
     /// <returns>true, если было столкновение.</returns>
@@ -67,7 +80,7 @@ public sealed class Player
         foreach (var s in level.Solids)
         {
             var b = Bounds;
-            if (!b.Intersects(s)) continue;
+            if (!Overlaps(b, s)) continue;
             hit = true;
             if (delta.X > 0) Position.X = s.Min.X - HalfExtents.X - 0.001f;
             else if (delta.X < 0) Position.X = s.Max.X + HalfExtents.X + 0.001f;
