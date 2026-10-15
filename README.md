@@ -14,6 +14,28 @@ dotnet build
 dotnet run --project DarkArena
 ```
 
+## Бенчмарк (`--bench`)
+```
+DarkArena.exe --bench        # 10 секунд
+DarkArena.exe --bench 30     # 30 секунд
+dotnet run --project DarkArena -c Release -- --bench 10
+```
+Игра сама запускает раунд и N секунд (по умолчанию 10) рендерит обычную сцену: игрок идёт по кругу, камера облетает его, вылетают частицы. VSync и фиксированный шаг времени на время замера выключены, первая секунда (прогрев) не учитывается. Потом игра закрывается, а результат печатается в консоль и записывается в `bench.txt` рядом с exe (`bin/<Конфигурация>/net8.0/bench.txt`):
+```
+Dark Arena bench
+duration_s: 10.00
+frames: 6240
+avg_fps: 624.0          средний FPS
+min_fps: 45.2           FPS самого медленного кадра
+low1_fps: 78.8          1% low: средний FPS по 1% самых медленных кадров
+frame_time_max_ms: 22.12  самый долгий кадр, мс
+gpu: Intel(R) UHD Graphics 610   видеокарта
+resolution: 1280x720
+msaa: 4x
+vsync: off, fixed_timestep: off
+```
+Переменная окружения `DARKARENA_NO_MSAA=1` выключает сглаживание (нужно для запуска без видеокарты, например в Xvfb).
+
 ## Управление
 | Клавиша | Действие |
 |---|---|
@@ -27,7 +49,7 @@ dotnet run --project DarkArena
 ## Структура
 ```
 DarkArena/
-  Program.cs               точка входа (--screenshot путь.png — автотест: 90 кадров и снимок)
+  Program.cs               точка входа (--screenshot путь.png — автотест: 90 кадров и снимок; --bench N — замер FPS)
   Source/ArenaGame.cs      состояния игры, цикл, отрисовка
   Source/Player.cs         игрок: движение, прыжок, гравитация, коллизии AABB
   Source/ThirdPersonCamera.cs  камера от третьего лица

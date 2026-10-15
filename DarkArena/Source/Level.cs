@@ -9,17 +9,17 @@ public sealed class Level
     public const float HalfSize = 20f;
     public List<BoundingBox> Solids { get; } = new();
     private readonly List<(BoundingBox box, Color color)> _draw = new();
+    private readonly List<(BoundingBox box, Vector3 inner)> _walls = new();
 
     public Level()
     {
         // Пол (верх на y = 0)
         Add(new Vector3(-HalfSize, -1, -HalfSize), new Vector3(HalfSize, 0, HalfSize), Palette.Floor);
         // Стены
-        var wall = Palette.Wall;
-        Add(new(-HalfSize - 1, 0, -HalfSize - 1), new(HalfSize + 1, 3, -HalfSize), wall);
-        Add(new(-HalfSize - 1, 0, HalfSize), new(HalfSize + 1, 3, HalfSize + 1), wall);
-        Add(new(-HalfSize - 1, 0, -HalfSize), new(-HalfSize, 3, HalfSize), wall);
-        Add(new(HalfSize, 0, -HalfSize), new(HalfSize + 1, 3, HalfSize), wall);
+        AddWall(new(-HalfSize - 1, 0, -HalfSize - 1), new(HalfSize + 1, 3, -HalfSize), Vector3.Backward);
+        AddWall(new(-HalfSize - 1, 0, HalfSize), new(HalfSize + 1, 3, HalfSize + 1), Vector3.Forward);
+        AddWall(new(-HalfSize - 1, 0, -HalfSize), new(-HalfSize, 3, HalfSize), Vector3.Right);
+        AddWall(new(HalfSize, 0, -HalfSize), new(HalfSize + 1, 3, HalfSize), Vector3.Left);
         // Препятствия
         var obs = Palette.Obstacle;
         Add(new(-8, 0, -8), new(-4, 2, -4), obs);
@@ -28,6 +28,13 @@ public sealed class Level
         Add(new(-12, 0, 6), new(-6, 1.2f, 9), obs);
         Add(new(-2, 0, 10), new(2, 2.4f, 13), obs);
         Add(new(-15, 0, -15), new(-12, 4, -12), obs);
+    }
+
+    private void AddWall(Vector3 min, Vector3 max, Vector3 inner)
+    {
+        var b = new BoundingBox(min, max);
+        Solids.Add(b);
+        _walls.Add((b, inner));
     }
 
     private void Add(Vector3 min, Vector3 max, Color c)
@@ -82,6 +89,8 @@ public sealed class Level
             var hs = h.Max - h.Min;
             prim.DrawCube(Matrix.CreateScale(hs) * Matrix.CreateTranslation((h.Max + h.Min) / 2f), Palette.Hazard, 0.6f);
         }
+        foreach (var (b, n) in _walls)
+            prim.DrawWall(Matrix.CreateScale(b.Max - b.Min) * Matrix.CreateTranslation((b.Max + b.Min) / 2f), Palette.Wall, n);
         foreach (var (b, c) in _draw)
         {
             var size = b.Max - b.Min;

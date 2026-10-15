@@ -13,6 +13,7 @@ public sealed class Primitives
     private readonly VertexBuffer _cube;
     private readonly VertexBuffer _crystal;
     private readonly VertexBuffer _cylinder;
+    private readonly Dictionary<Vector3, VertexBuffer> _wallMeshes = new();
 
     public Primitives(GraphicsDevice gd)
     {
@@ -47,7 +48,7 @@ public sealed class Primitives
     }
 
     /// <summary>Единичный куб от -0.5 до 0.5.</summary>
-    private static VertexPositionNormalTexture[] CubeVerts()
+    private static VertexPositionNormalTexture[] CubeVerts(Vector3? topNormal = null)
     {
         var l = new List<VertexPositionNormalTexture>();
         Vector3[] p =
@@ -61,6 +62,9 @@ public sealed class Primitives
             Tri(l, p[f[0]], p[f[1]], p[f[2]]);
             Tri(l, p[f[0]], p[f[2]], p[f[3]]);
         }
+        if (topNormal is Vector3 tn) // верхняя грань (+Y) получает нормаль внутренней грани стены
+            for (int i = 0; i < l.Count; i++)
+                if (l[i].Normal.Y > 0.99f) l[i] = new(l[i].Position, tn, l[i].TextureCoordinate);
         return l.ToArray();
     }
 
@@ -136,6 +140,18 @@ public sealed class Primitives
         if (fwd.LengthSquared() < 1e-4f) fwd = Vector3.Forward;
         fwd.Normalize();
         Effect.DirectionalLight0.Direction = Vector3.Normalize(fwd + new Vector3(0.35f, -1.1f, 0) );
+    }
+
+    /// <summary>
+    /// Стена периметра. Её верх (толщина 1 м) с камеры над стеной виден под скользящим углом как полоска
+    /// в доли пикселя; при обычной нормали +Y она освещена ярче фасада и даёт «пунктир» над стеной
+    /// (алиасинг). Поэтому верх шейдится нормалью внутренней грани — одного цвета с фасадом.
+    /// </summary>
+    public void DrawWall(Matrix world, Color color, Vector3 innerNormal)
+    {
+        if (!_wallMeshes.TryGetValue(innerNormal, out var vb))
+            _wallMeshes[innerNormal] = vb = Build(_gd, CubeVerts(innerNormal));
+        Draw(vb, world, color, 0f, true);
     }
 
     public void DrawCube(Matrix world, Color color, float emissive = 0f, bool lit = true, float alpha = 1f) => Draw(_cube, world, color, emissive, lit, alpha);

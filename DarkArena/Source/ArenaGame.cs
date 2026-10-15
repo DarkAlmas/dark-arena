@@ -19,6 +19,10 @@ public sealed class ArenaGame : Game
     private readonly GraphicsDeviceManager _graphics;
     private readonly string _screenshotPath; // режим smoke-теста: --screenshot <путь>
     private int _frames;
+    private readonly float _benchSeconds; // режим бенчмарка: --bench N (0 = выкл.)
+    private float _benchTime, _benchWarmup = 1f;
+    private readonly List<double> _benchFrameMs = new();
+    private readonly System.Diagnostics.Stopwatch _benchSw = new();
 
     private Primitives _prim;
     private Ui _ui;
@@ -40,17 +44,19 @@ public sealed class ArenaGame : Game
     private KeyboardState _kb, _pkb;
     private MouseState _ms, _pms;
 
-    public ArenaGame(string screenshotPath = null)
+    public ArenaGame(string screenshotPath = null, float benchSeconds = 0f)
     {
         _screenshotPath = screenshotPath;
+        _benchSeconds = benchSeconds;
         _graphics = new GraphicsDeviceManager(this)
         {
             PreferredBackBufferWidth = 1280,
             PreferredBackBufferHeight = 720,
             PreferredDepthStencilFormat = DepthFormat.Depth24Stencil8,
-            PreferMultiSampling = screenshotPath == null, // в Xvfb MSAA недоступен
-            SynchronizeWithVerticalRetrace = true,
+            PreferMultiSampling = screenshotPath == null && Environment.GetEnvironmentVariable("DARKARENA_NO_MSAA") == null, // в Xvfb MSAA недоступен
+            SynchronizeWithVerticalRetrace = benchSeconds <= 0,
         };
+        if (benchSeconds > 0) IsFixedTimeStep = false;
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
         Window.Title = "Dark Arena";
@@ -68,6 +74,7 @@ public sealed class ArenaGame : Game
         _settingsMenu = new Menu("НАСТРОЙКИ", "", "", "Назад");
         _gameOverMenu = new Menu("", "Играть снова", "В главное меню");
         NewRound();
+        if (_benchSeconds > 0) StartPlaying();
         if (_screenshotPath != null) { StartPlaying(); _camera.Yaw = 0.6f; _camera.Pitch = 0.3f; }
     }
 
@@ -165,6 +172,8 @@ public sealed class ArenaGame : Game
     {
         if (Pressed(Keys.Escape)) { ToMenu(GameState.Paused); return; }
 
+        if (_benchSeconds > 0) { BenchStep(dt); return; }
+
         if (IsActive && _screenshotPath == null)
         {
             var center = new Point(vp.Width / 2, vp.Height / 2);
@@ -190,6 +199,50 @@ public sealed class ArenaGame : Game
         if (_collected >= TotalCrystals) EndRound("ПОБЕДА!", $"Все кристаллы собраны, осталось {_timeLeft:0} с");
         else if (_timeLeft <= 0) EndRound("ВРЕМЯ ВЫШЛО", $"Собрано {_collected} из {TotalCrystals}");
         else if (_health <= 0) EndRound("ПОРАЖЕНИЕ", $"Собрано {_collected} из {TotalCrystals}");
+    }
+
+    /// <summary>Автоматический маршрут для бенчмарка: игрок идёт по кругу, камера облетает его.</summary>
+    private void BenchStep(float dt)
+    {
+        _benchTime += dt;
+        float t = _benchTime;
+        var target = new Vector3(MathF.Cos(t * 0.4f) * 16f, 0, MathF.Sin(t * 0.4f) * 16f);
+        _player.Position = target;
+        _player.Facing = -t * 0.4f;
+        _camera.Yaw = t * 0.5f;
+        _camera.Pitch = 0.25f + 0.2f * MathF.Sin(t * 0.7f);
+        if ((int)(t * 2) != (int)((t - dt) * 2)) _particles.Burst(_player.Position + Vector3.Up);
+    }
+
+    private void BenchFrame()
+    {
+        double ms = _benchSw.Elapsed.TotalMilliseconds;
+        _benchSw.Restart();
+        if (_benchWarmup > 0) { _benchWarmup -= (float)(ms / 1000.0); return; } // 1 с прогрева не считаем
+        _benchFrameMs.Add(ms);
+        double total = 0; foreach (var f in _benchFrameMs) total += f;
+        if (total / 1000.0 < _benchSeconds) return;
+
+        var sorted = new List<double>(_benchFrameMs); sorted.Sort();
+        int n = sorted.Count, worst = Math.Max(1, n / 100);
+        double worstSum = 0; for (int i = n - worst; i < n; i++) worstSum += sorted[i];
+        var pp = GraphicsDevice.PresentationParameters;
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        string report = string.Join(Environment.NewLine,
+            "Dark Arena bench",
+            string.Format(inv, "duration_s: {0:0.00}", total / 1000.0),
+            $"frames: {n}",
+            string.Format(inv, "avg_fps: {0:0.0}", n / (total / 1000.0)),
+            string.Format(inv, "min_fps: {0:0.0}", 1000.0 / sorted[n - 1]),
+            string.Format(inv, "low1_fps: {0:0.0}", 1000.0 / (worstSum / worst)),
+            string.Format(inv, "frame_time_max_ms: {0:0.00}", sorted[n - 1]),
+            $"gpu: {GraphicsAdapter.DefaultAdapter.Description}",
+            $"resolution: {pp.BackBufferWidth}x{pp.BackBufferHeight}",
+            $"msaa: {(pp.MultiSampleCount > 1 ? pp.MultiSampleCount + "x" : "off")}",
+            "vsync: off, fixed_timestep: off") + Environment.NewLine;
+        Console.Write(report);
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "bench.txt"), report);
+        Exit();
     }
 
     private void EndRound(string title, string subtitle)
@@ -244,6 +297,7 @@ public sealed class ArenaGame : Game
         base.Draw(gameTime);
 
         if (_screenshotPath != null && ++_frames == 90) SaveScreenshot();
+        if (_benchSeconds > 0) BenchFrame();
     }
 
     private void SaveScreenshot()
