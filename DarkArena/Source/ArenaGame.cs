@@ -19,6 +19,7 @@ public sealed class ArenaGame : Game
     private readonly GraphicsDeviceManager _graphics;
     private readonly string _screenshotPath; // режим smoke-теста: --screenshot <путь>
     private int _frames;
+    private readonly string _modeNote; // например " (fallback)"
     private readonly float _benchSeconds; // режим бенчмарка: --bench N (0 = выкл.)
     private float _benchTime, _benchWarmup = 1f;
     private readonly List<double> _benchFrameMs = new();
@@ -44,16 +45,17 @@ public sealed class ArenaGame : Game
     private KeyboardState _kb, _pkb;
     private MouseState _ms, _pms;
 
-    public ArenaGame(string screenshotPath = null, float benchSeconds = 0f)
+    public ArenaGame(string screenshotPath = null, float benchSeconds = 0f, bool msaa = true, string modeNote = "")
     {
         _screenshotPath = screenshotPath;
         _benchSeconds = benchSeconds;
+        _modeNote = modeNote;
         _graphics = new GraphicsDeviceManager(this)
         {
             PreferredBackBufferWidth = 1280,
             PreferredBackBufferHeight = 720,
             PreferredDepthStencilFormat = DepthFormat.Depth24Stencil8,
-            PreferMultiSampling = screenshotPath == null && Environment.GetEnvironmentVariable("DARKARENA_NO_MSAA") == null, // в Xvfb MSAA недоступен
+            PreferMultiSampling = msaa, // без MSAA при ошибке создания устройства (см. Program.cs)
             SynchronizeWithVerticalRetrace = benchSeconds <= 0,
         };
         if (benchSeconds > 0) IsFixedTimeStep = false;
@@ -238,7 +240,7 @@ public sealed class ArenaGame : Game
             string.Format(inv, "frame_time_max_ms: {0:0.00}", sorted[n - 1]),
             $"gpu: {GraphicsAdapter.DefaultAdapter.Description}",
             $"resolution: {pp.BackBufferWidth}x{pp.BackBufferHeight}",
-            $"msaa: {(pp.MultiSampleCount > 1 ? pp.MultiSampleCount + "x" : "off")}",
+            $"msaa: {(pp.MultiSampleCount > 1 ? pp.MultiSampleCount + "x" : "off")}{_modeNote}",
             "vsync: off, fixed_timestep: off") + Environment.NewLine;
         Console.Write(report);
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "bench.txt"), report);
